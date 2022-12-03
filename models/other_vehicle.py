@@ -9,18 +9,18 @@ class OtherVehicle(ConstrainedLinearBicycleModel):
         self.yaw_other = None
         self.v_other = None
         self.mode = None
-        self.start_overtake_complete = False
+        self.change_lane_complete = False
         self.cumulative_overtake_time = 0.0
         self.case_overtake = 1
         self.overtake_tried = False
 
         self.max_steer = np.radians(30.0)
         self.min_v = 10.0
-        self.max_v = 20.0
+        self.max_v = 30.0
         self.min_a = -7.0
         self.max_a = 4.0
-        self.min_jerk = -100.0
-        self.max_jerk = 20.0
+        self.min_jerk = -11.0 #-10.0
+        self.max_jerk = 6.0 #5.0
         self.dt = 0.01
 
     def next(self, x_other, y_other, yaw_other, v_other):
@@ -32,31 +32,38 @@ class OtherVehicle(ConstrainedLinearBicycleModel):
         :param v_other: global speed of the other agent
         """
 
-        distance_other = np.sqrt((x_other - self.x) ** 2 + (y_other - self.y) ** 2)
+        long_distance_other = self.x - x_other
 
         if self.mode is None:
             self.steady()
             return None
         if self.mode == 'steady':
-            if distance_other > 8.0:
+            if np.abs(long_distance_other) > 7.0:
                 self.steady()
                 return None
             else:
-                self.start_overtake()
+                self.change_lane()
                 return None
-        if self.mode == 'start_overtake' and (self.start_overtake_complete is False):
-            self.start_overtake()
-            return None
-        elif self.mode == 'start_overtake' and (self.start_overtake_complete is True):
-            self.perform_overtake(x_other, y_other, yaw_other, v_other)
-            return None
-        if self.mode == 'perform_overtake' and not self.overtake_tried:
-            self.perform_overtake(x_other, y_other, yaw_other, v_other)
-            return None
-        if self.mode == 'perform_overtake' and self.overtake_tried:
-            self.perform_overtake(x_other, y_other, yaw_other, v_other)
-            if distance_other > 6.0:
-                return 0
+        if self.mode == 'change_lane':
+            if self.change_lane_complete is False:
+                self.change_lane()
+                return None
+            else:
+                self.perform_overtake(x_other, y_other, yaw_other, v_other)
+                return None
+        if self.mode == 'perform_overtake':
+            if self.overtake_tried is False:
+                self.perform_overtake(x_other, y_other, yaw_other, v_other)
+                if long_distance_other > 6.0:
+                    return 0
+                else:
+                    return None
+            else:
+                self.perform_overtake(x_other, y_other, yaw_other, v_other)
+                if np.abs(long_distance_other) > 6.0:
+                    return 0
+                else:
+                    return None
 
     def steady(self):
         """
@@ -68,19 +75,19 @@ class OtherVehicle(ConstrainedLinearBicycleModel):
         delta = 0.0
         self.update(throttle, delta)
 
-    def start_overtake(self):
+    def change_lane(self):
         """
-        Behavioral mode: start_overtake. Computes next pose
+        Behavioral mode: change_lane. Computes next pose
         """
 
-        self.mode = 'start_overtake'
+        self.mode = 'change_lane'
         throttle = 0.0
         lateral_error = 2.5 - self.y
         orientation_error = - self.yaw
         delta = self.stanley_controller(lateral_error, orientation_error)
         self.update(throttle, delta)
-        if lateral_error < 0.05 and orientation_error < 0.01:
-            self.start_overtake_complete = True
+        if lateral_error < 0.01 and orientation_error < 0.01:
+            self.change_lane_complete = True
 
     def stanley_controller(self, lateral_error, orientation_error):
         """
@@ -88,7 +95,7 @@ class OtherVehicle(ConstrainedLinearBicycleModel):
         :param lateral_error: the vehicle lateral error with respect to the reference lane
         :param orientation_error: the vehicle orientation error with respect to the reference lane
         """
-        k_e = 1.5
+        k_e = 2.0
         k_v = 20.0
 
         yaw_diff_crosstrack = np.arctan(k_e * lateral_error / (k_v + self.v))
@@ -98,8 +105,6 @@ class OtherVehicle(ConstrainedLinearBicycleModel):
         if delta < - np.pi:
             delta += 2 * np.pi
         return delta
-
-
 
     def perform_overtake(self, x_other, y_other, yaw_other, v_other):
         """
@@ -120,5 +125,7 @@ class OtherVehicle(ConstrainedLinearBicycleModel):
         else:
             throttle = self.min_a
 
-        delta = 0.0
+        lateral_error = 2.5 - self.y
+        orientation_error = - self.yaw
+        delta = self.stanley_controller(lateral_error, orientation_error)
         self.update(throttle, delta)

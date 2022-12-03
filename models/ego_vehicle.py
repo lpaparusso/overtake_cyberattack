@@ -12,14 +12,14 @@ class EgoVehicle(ConstrainedLinearBicycleModel):
 
         self.max_steer = np.radians(30.0)
         self.min_v = 10.0
-        self.max_v = 20.0
+        self.max_v = 30.0
         self.min_a = -7.0
         self.max_a = 4.0
-        self.min_jerk = -100.0
-        self.max_jerk = 20.0
+        self.min_jerk = -10.0
+        self.max_jerk = 5.0
         self.dt = 0.01
 
-    def next(self, x_other, y_other, yaw_other, v_other):
+    def next(self, x_other, y_other, yaw_other, v_other, a_other):
         """
         Computes next pose using a state machine
         :param x_other: global x of the other agent
@@ -35,21 +35,13 @@ class EgoVehicle(ConstrainedLinearBicycleModel):
             return None
         if self.mode == 'steady':
             if long_distance_other > 2.0:
-                self.brake()
-                return None
-            else:
                 self.steady()
                 return None
-        if self.mode == 'brake':
-            if long_distance_other > 0.1:
-                self.brake()
-                return None
             else:
-                self.danger(x_other, y_other, yaw_other, v_other)
+                self.danger(x_other, y_other, yaw_other, v_other, a_other)
                 return None
         if self.mode == 'danger':
-            self.danger(x_other, y_other, yaw_other, v_other)
-            print(self.throttle)
+            self.danger(x_other, y_other, yaw_other, v_other, a_other)
             return None
 
     def steady(self):
@@ -62,32 +54,23 @@ class EgoVehicle(ConstrainedLinearBicycleModel):
         delta = 0.0
         self.update(throttle, delta)
 
-    def brake(self):
-        """
-        Behavioral mode: brake. Computes next pose
-        """
-
-        self.mode = 'brake'
-        throttle = - 0.1
-        delta = 0.0
-        self.update(throttle, delta)
-
-    def danger(self, x_other, y_other, yaw_other, v_other):
+    def danger(self, x_other, y_other, yaw_other, v_other, a_other):
         """
         Behavioral mode: danger. Computes next pose given the current surrounding agent state
         :param x_other: global x of the other agent
         :param y_other: global y of the other agent
         :param yaw_other: global yaw of the other agent
         :param v_other: global speed of the other agent
+        :param a_other: global acceleration of the other agent
         """
 
         self.mode = 'danger'
         pos_error = x_other - self.x
         vel_error = v_other - self.v
-        throttle = self.pid(pos_error, vel_error)
+        throttle = self.pid(pos_error, vel_error, a_other)
         delta = 0.0
         self.update(throttle, delta)
 
-    def pid(self, pos_error, vel_error):
-        throttle = 1000 * pos_error# + 10 * vel_error
+    def pid(self, pos_error, vel_error, a_other):
+        throttle = a_other + 0.25 * pos_error + 0.5 * vel_error
         return throttle

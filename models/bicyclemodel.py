@@ -1,48 +1,48 @@
 import numpy as np
 import math
 
-max_steer = np.radians(30.0)  # [rad] max steering angle
-L = 2.9  # [m] Wheel base of vehicle
-dt = 0.01
-Lr = L / 2.0  # [m]
-Lf = L - Lr
-Cf = 1600.0 * 2.0  # N/rad
-Cr = 1700.0 * 2.0  # N/rad
-Iz = 2250.0  # kg/m2
-m = 1500.0  # kg
+# max_steer = np.radians(30.0)  # [rad] max steering angle
+# L = 2.9  # [m] Wheel base of vehicle
+# dt = 0.01
+# Lr = L / 2.0  # [m]
+# Lf = L - Lr
+# Cf = 1600.0 * 2.0  # N/rad
+# Cr = 1700.0 * 2.0  # N/rad
+# Iz = 2250.0  # kg/m2
+# m = 1500.0  # kg
 
+# # non-linear lateral bicycle model
+# class NonLinearBicycleModel(object):
+#     def __init__(self, x=0.0, y=0.0, yaw=0.0, vx=0.01, vy=0, omega=0.0):
+#         self.x = x
+#         self.y = y
+#         self.yaw = yaw
+#         self.vx = vx
+#         self.vy = vy
+#         self.omega = omega
+#         # Aerodynamic and friction coefficients
+#         self.c_a = 1.36
+#         self.c_r1 = 0.01
+#
+#     def update(self, throttle, delta):
+#         delta = np.clip(delta, -max_steer, max_steer)
+#         self.x = self.x + self.vx * math.cos(self.yaw) * dt - self.vy * math.sin(self.yaw) * dt
+#         self.y = self.y + self.vx * math.sin(self.yaw) * dt + self.vy * math.cos(self.yaw) * dt
+#         self.yaw = self.yaw + self.omega * dt
+#         self.yaw = normalize_angle(self.yaw)
+#         Ffy = -Cf * math.atan2(((self.vy + Lf * self.omega) / self.vx - delta), 1.0)
+#         Fry = -Cr * math.atan2((self.vy - Lr * self.omega) / self.vx, 1.0)
+#         R_x = self.c_r1 * self.vx
+#         F_aero = self.c_a * self.vx ** 2
+#         F_load = F_aero + R_x
+#         self.vx = self.vx + (throttle - Ffy * math.sin(delta) / m - F_load/m + self.vy * self.omega) * dt
+#         self.vy = self.vy + (Fry / m + Ffy * math.cos(delta) / m - self.vx * self.omega) * dt
+#         self.omega = self.omega + (Ffy * Lf * math.cos(delta) - Fry * Lr) / Iz * dt
+#
+#
+# # reference: https://www.coursera.org/lecture/intro-self-driving-cars/lesson-2-the-kinematic-bicycle-model-Bi8yE,
+# # we used the "Rear Alex Bicycle model" as mentioned in that tutorial. TODO: update Read.me
 
-# non-linear lateral bicycle model
-class NonLinearBicycleModel(object):
-    def __init__(self, x=0.0, y=0.0, yaw=0.0, vx=0.01, vy=0, omega=0.0):
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-        self.vx = vx
-        self.vy = vy
-        self.omega = omega
-        # Aerodynamic and friction coefficients
-        self.c_a = 1.36
-        self.c_r1 = 0.01
-
-    def update(self, throttle, delta):
-        delta = np.clip(delta, -max_steer, max_steer)
-        self.x = self.x + self.vx * math.cos(self.yaw) * dt - self.vy * math.sin(self.yaw) * dt
-        self.y = self.y + self.vx * math.sin(self.yaw) * dt + self.vy * math.cos(self.yaw) * dt
-        self.yaw = self.yaw + self.omega * dt
-        self.yaw = normalize_angle(self.yaw)
-        Ffy = -Cf * math.atan2(((self.vy + Lf * self.omega) / self.vx - delta), 1.0)
-        Fry = -Cr * math.atan2((self.vy - Lr * self.omega) / self.vx, 1.0)
-        R_x = self.c_r1 * self.vx
-        F_aero = self.c_a * self.vx ** 2
-        F_load = F_aero + R_x
-        self.vx = self.vx + (throttle - Ffy * math.sin(delta) / m - F_load/m + self.vy * self.omega) * dt
-        self.vy = self.vy + (Fry / m + Ffy * math.cos(delta) / m - self.vx * self.omega) * dt
-        self.omega = self.omega + (Ffy * Lf * math.cos(delta) - Fry * Lr) / Iz * dt
-
-
-# reference: https://www.coursera.org/lecture/intro-self-driving-cars/lesson-2-the-kinematic-bicycle-model-Bi8yE,
-# we used the "Rear Alex Bicycle model" as mentioned in that tutorial. TODO: update Read.me
 class LinearBicycleModel(object):
     """
     Class representing the state of a vehicle.
@@ -52,12 +52,16 @@ class LinearBicycleModel(object):
     :param v: (float) speed
     """
 
-    def __init__(self, x=0.0, y=0.0, yaw=0.0, v=0.0):
+    def __init__(self, params, x=0.0, y=0.0, yaw=0.0, v=0.0):
         """Instantiate the object."""
         self.x = x
         self.y = y
         self.yaw = yaw
         self.v = v
+        self.params = params
+
+        self.throttle = 0.0
+        self.delta = 0.0
 
     def update(self, throttle, delta):
         """
@@ -66,33 +70,21 @@ class LinearBicycleModel(object):
         :param a: (float) Acceleration
         :param delta: (float) Steering
         """
-        delta = np.clip(delta, -max_steer, max_steer)
+        L = self.params['L']
+        dt = self.params['dt']
 
         self.x += self.v * np.cos(self.yaw) * dt
         self.y += self.v * np.sin(self.yaw) * dt
         self.yaw += self.v / L * np.tan(delta) * dt
         self.yaw = normalize_angle(self.yaw)
         self.v += throttle * dt
+        self.throttle = throttle
+        self.delta = delta
 
 class ConstrainedLinearBicycleModel(LinearBicycleModel):
-    def __init__(self, x=0.0, y=0.0, yaw=0.0, v=0.0):
-        super().__init__(x, y, yaw, v)
-        self.throttle = 0.0
-
-        self.x_other = None
-        self.y_other = None
-        self.yaw_other = None
-        self.v_other = None
-        self.mode = None
-
-        self.max_steer = np.radians(30.0)
-        self.min_v = 10.0
-        self.max_v = 20.0
-        self.min_a = -4.0
-        self.max_a = 3.0
-        self.min_jerk = -2.0
-        self.max_jerk = 1.0
-        self.dt = 0.1
+    def __init__(self, params, x=0.0, y=0.0, yaw=0.0, v=0.0):
+        super().__init__(params, x, y, yaw, v)
+        self.params['max_steer'] = np.deg2rad(self.params['max_steer'])
 
     def update(self, throttle, delta):
         """
@@ -100,21 +92,33 @@ class ConstrainedLinearBicycleModel(LinearBicycleModel):
         :param throttle: (float) Acceleration
         :param delta: (float) Steering
         """
-        delta = np.clip(delta, -self.max_steer, self.max_steer)
-        min_a_given_v = (self.min_v - self.v) / self.dt
-        max_a_given_v = (self.max_v - self.v) / self.dt
-        min_a_given_jerk = self.min_jerk * self.dt + self.throttle
-        max_a_given_jerk = self.max_jerk * self.dt + self.throttle
-        throttle = np.clip(throttle, self.min_a, self.max_a)
+        # Get params
+        max_steer = self.params['max_steer']
+        min_v = self.params['min_v']
+        max_v = self.params['max_v']
+        min_a = self.params['min_a']
+        max_a = self.params['max_a']
+        min_jerk = self.params['min_jerk']
+        max_jerk = self.params['max_jerk']
+        dt = self.params['dt']
+
+        # Get old throttle
+        old_throttle = self.throttle
+
+        # Constrain throttle
+        min_a_given_v = (min_v - self.v) / dt
+        max_a_given_v = (max_v - self.v) / dt
+        min_a_given_jerk = min_jerk * dt + old_throttle
+        max_a_given_jerk = max_jerk * dt + old_throttle
+        throttle = np.clip(throttle, min_a, max_a)
         throttle = np.clip(throttle, min_a_given_v, max_a_given_v)
         throttle = np.clip(throttle, min_a_given_jerk, max_a_given_jerk)
 
-        self.x += self.v * np.cos(self.yaw) * self.dt
-        self.y += self.v * np.sin(self.yaw) * self.dt
-        self.yaw += self.v / L * np.tan(delta) * self.dt
-        self.yaw = normalize_angle(self.yaw)
-        self.v += throttle * self.dt
-        self.throttle = throttle
+        # Constrain steering
+        delta = np.clip(delta, -max_steer, max_steer)
+
+        # Update
+        super().update(throttle, delta)
 
 def normalize_angle(angle):
     """
